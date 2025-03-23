@@ -1,0 +1,43 @@
+services:
+  mongo:
+    image: mongo
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - inter-service-network
+
+  redis:
+    image: redis
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - inter-service-network
+
+  server:
+    build:
+      context: ./server
+    networks:
+      - inter-service-network
+    depends_on:
+      - mongo
+      - redis
+    deploy:
+      replicas: 4
+
+  # can we do this duplication above manually?
+
+  nginx:
+    build:
+      context: ./nginx
+    ports:
+      - "8080:8080"
+    depends_on:
+      - server
+    networks:
+      - inter-service-network
+
+networks:
+  inter-service-network:
