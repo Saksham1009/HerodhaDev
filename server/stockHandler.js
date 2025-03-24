@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const UserStocks = require('./DBModels/User_Stocks');
 const StockTx = require('./DBModels/Stock_Tx');
+const matchingEngine = require('./DBModels/engine');
+const client = require('./RedisConnection');
+const Stock = require('./DBModels/Stock');
 
 router.get('/getStockPortfolio', async (req, res) => {
     try {
@@ -22,7 +25,7 @@ router.get('/getStockPortfolio', async (req, res) => {
             "data": response
         });
     } catch (error) {
-        return res.status(401).json({
+        return res.status(400).json({
             "success": false,
             "data": {
                 "error": "There seems to be an error " + error
@@ -57,7 +60,66 @@ router.get('/getStockTransactions', async (req, res) => {
             "data": response
         });
     } catch (error) {
-        return res.status(401).json({
+        return res.status(400).json({
+            "success": false,
+            "data": {
+                "error": "There seems to be an error " + error
+            }
+        });
+    }
+});
+
+router.get('/getStockPrices', async (req, res) => {
+    try {
+        const sellOrders = await matchingEngine.orderBook.getSellOrders();
+
+        if (!sellOrders || sellOrders.length === 0) {
+            return res.status(200).json({
+                "success": true,
+                "data": []
+            });
+        }
+
+        const stocks = [...new Set(sellOrders.map(order => order.stock_id))];
+
+        const cacheKey = `stock_prices_${stocks.join("_")}`;
+        const cachedDataExists = await client.get(cacheKey);
+
+        if (cachedDataExists) {
+            return res.status(200).json({
+                "success": true,
+                "data": JSON.parse(cachedDataExists)
+            });
+        }
+
+        const stockPrices = {};
+        const stockPriceData = client.get("orderBookData");
+        JSON.parse(stockPriceData).forEach(order => {
+            if (stockPrices[order.stock_id] && stockPrices[order.stock_id] > order.price) {
+                stockPrices[order.stock_id] = order.price;
+            } else if (!stockPrices[order.stock_id]) {
+                stockPrices[order.stock_id] = order.price;
+            }
+        });
+
+        const stockData = await Stock.find();
+        const response = [];
+        stockPrices.forEach(stock => {
+            const stockName = stockData.find(data => data.stock_id === stock).stock_name;
+            response.push({
+                "stock_id": stock,
+                "stock_name": stockName,
+                "stock_price": stockPrices[stock]
+            });
+        });
+
+        client.set(cacheKey, JSON.stringify(response));
+        return res.status(200).json({
+            "success": true,
+            "data": response
+        });
+    } catch (error) {
+        return res.status(400).json({
             "success": false,
             "data": {
                 "error": "There seems to be an error " + error
