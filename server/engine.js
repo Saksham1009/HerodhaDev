@@ -59,6 +59,7 @@ router.post('/placeStockOrder', async (req, res) => {
             const stockTx = new Stock_Tx({
                 stock_tx_id: uuid.v4(),
                 stock_id: stock_id,
+                parent_stock_tx_id: null,
                 wallet_tx_id: null,
                 user_id: user_id,
                 order_status: 'IN_PROGRESS',

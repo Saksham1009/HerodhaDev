@@ -85,6 +85,9 @@ router.get('/getStockPrices', async (req, res) => {
         const cacheKey = `stock_prices_${stocks.join("_")}`;
         const cachedDataExists = await client.get(cacheKey);
 
+        console.log("Here is the cached data");
+        console.log(cachedDataExists);
+
         if (cachedDataExists) {
             return res.status(200).json({
                 "success": true,
@@ -93,7 +96,9 @@ router.get('/getStockPrices', async (req, res) => {
         }
 
         const stockPrices = {};
-        const stockPriceData = client.get("orderBookData");
+        const stockPriceData = await client.get("orderBookData");
+        console.log("Here is the order book data");
+        console.log(stockPriceData);
         JSON.parse(stockPriceData).forEach(order => {
             if (stockPrices[order.stock_id] && stockPrices[order.stock_id] > order.price) {
                 stockPrices[order.stock_id] = order.price;
@@ -104,7 +109,7 @@ router.get('/getStockPrices', async (req, res) => {
 
         const stockData = await Stock.find();
         const response = [];
-        stockPrices.forEach(stock => {
+        Object.keys(stockPrices).forEach(stock => {
             const stockName = stockData.find(data => data.stock_id === stock).stock_name;
             response.push({
                 "stock_id": stock,

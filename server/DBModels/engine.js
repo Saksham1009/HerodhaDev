@@ -29,6 +29,33 @@ class Engine {
         try {
             await redis.set("orderBookData", JSON.stringify(this.orderBook.sellOrders));
             await redis.publish("orderBookData", JSON.stringify(this.orderBook.sellOrders));
+
+            const stocks = [...new Set(this.orderBook.sellOrders.map(order => order.stock_id))];
+
+            const cacheKey = `stock_prices_${stocks.join("_")}`;
+
+            const stockPrices = {};
+            const stockPriceData = this.orderBook.sellOrders;
+            stockPriceData.forEach(order => {
+                if (stockPrices[order.stock_id] && stockPrices[order.stock_id] > order.price) {
+                    stockPrices[order.stock_id] = order.price;
+                } else if (!stockPrices[order.stock_id]) {
+                    stockPrices[order.stock_id] = order.price;
+                }
+            });
+
+            const stockData = await Stock.find();
+            const response = [];
+            Object.keys(stockPrices).forEach(stock => {
+                const stockName = stockData.find(data => data.stock_id === stock).stock_name;
+                response.push({
+                    "stock_id": stock,
+                    "stock_name": stockName,
+                    "stock_price": stockPrices[stock]
+                });
+            });
+
+            redis.set(cacheKey, JSON.stringify(response));
         } catch (error) {
             console.error("Error saving order book in Redis: " + error);
         }
@@ -48,6 +75,7 @@ class Engine {
             }
         } else {
             this.orderBook.addSellOrder(order);
+
         }
 
         await this.saveBookInRedis();
@@ -99,7 +127,9 @@ class Engine {
 
     async initializeEngine() {
         const orders = await redis.get("orderBookData");
-        this.orderBook.sellOrders = JSON.parse(orders);
+        if (orders) {
+            this.orderBook.sellOrders = JSON.parse(orders);
+        }
 
         redisSub.subscribe('orderBook', (err, count) => {
             if (err) {
