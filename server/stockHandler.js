@@ -71,8 +71,13 @@ router.get('/getStockTransactions', async (req, res) => {
 
 router.get('/getStockPrices', async (req, res) => {
     try {
-        const sellOrders = await matchingEngine.orderBook.getSellOrders();
+        console.log("Fetching sell orders from orderBook...");
+        console.log("OrderBook instance in /getStockPrices:", matchingEngine.orderBook);
+        await matchingEngine.refreshBook();
+        const sellOrders = matchingEngine.orderBook.getSellOrders();
+        
 
+        console.log("Sell Orders:", sellOrders);
         if (!sellOrders || sellOrders.length === 0) {
             return res.status(200).json({
                 "success": true,
@@ -81,9 +86,11 @@ router.get('/getStockPrices', async (req, res) => {
         }
 
         const stocks = [...new Set(sellOrders.map(order => order.stock_id))];
+        console.log("Unique stock IDs from sell orders:", stocks);
 
         const cacheKey = `stock_prices_${stocks.join("_")}`;
         const cachedDataExists = await client.get(cacheKey);
+
 
         console.log("Here is the cached data");
         console.log(cachedDataExists);
