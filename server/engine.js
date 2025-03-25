@@ -142,12 +142,18 @@ router.post('/placeStockOrder', async (req, res) => {
                     user_id: sellOrder.user_id,
                     order_status: 'COMPLETED',
                     is_buy: false,
-                    order_type: order_type,
+                    order_type: 'LIMIT',
                     quantity: quantityToMatch,
                     stock_price: priceToMatch,
                     parent_stock_tx_id: sellOrder.id
                 });
                 await sellStockTx.save();
+
+                const parentStockTx = await Stock_Tx.findOne({ stock_tx_id: sellOrder.id });
+                if (parentStockTx) {
+                    parentStockTx.order_status = 'PARTIALLY_COMPLETE';
+                    await parentStockTx.save();
+                }
 
                 const buyWalletTx = new Wallet_Tx({
                     wallet_tx_id: buyStockTx.wallet_tx_id,
@@ -264,12 +270,13 @@ router.post('/cancelStockTransaction', async (req, res) => {
         if (quantityToReturn > 0) {
             const userStock = await User_Stocks.findOne({ user_id: user_id, stock_id: stockTx.stock_id });
             if (!userStock) {
+                const stock = await Stock.findOne({ stock_id: stockTx.stock_id });
                 const newUserStock = new User_Stocks({
                     user_stock_id: uuid.v4(),
                     user_id: user_id,
                     stock_id: stockTx.stock_id,
                     quantity_owned: quantityToReturn,
-                    stock_name: stockTx.stock_name
+                    stock_name: stock.stock_name
                 });
                 await newUserStock.save();
             } else {
