@@ -108,8 +108,8 @@ router.post('/placeStockOrder', async (req, res) => {
                 });
             }
 
-            const quantityLeftToMatch = quantity;
-            const totalPriceForOrder = 0;
+            let quantityLeftToMatch = quantity;
+            let totalPriceForOrder = 0;
 
             for (let sellOrder of filteredSellOrders) {
                 const quantityToMatch = Math.min(quantityLeftToMatch, sellOrder.quantity);
