@@ -139,21 +139,21 @@ class Engine {
     async executeOrder(order) {
         console.log("Executing order:", order);
         if (order.is_buy && order.order_type === 'MARKET') {
-            console.log("Processing as market BUY order...");
-            const sellOrder = this.orderBook.getFirstSellOrder(); // TODO: this might cause issue since we are have all stockids in one list
-            console.log("First available sell order:", sellOrder);
-            while (order.quantity > 0 && sellOrder) {
-                const quantity = Math.min(order.quantity, sellOrder.quantity);
-                console.log(`Matching quantity: ${quantity}`);
+            // console.log("Processing as market BUY order...");
+            // const sellOrder = this.orderBook.getFirstSellOrder(); // TODO: this might cause issue since we are have all stockids in one list
+            // console.log("First available sell order:", sellOrder);
+            // while (order.quantity > 0 && sellOrder) {
+            //     const quantity = Math.min(order.quantity, sellOrder.quantity);
+            //     console.log(`Matching quantity: ${quantity}`);
 
-                order.quantity -= quantity;
-                sellOrder.quantity -= quantity;
+            //     order.quantity -= quantity;
+            //     sellOrder.quantity -= quantity;
 
-                if (sellOrder.quantity === 0) {
-                    this.orderBook.deleteSellOrder(sellOrder.id);
-                }
+            //     if (sellOrder.quantity === 0) {
+            //         this.orderBook.deleteSellOrder(sellOrder.id);
+            //     }
             
-            }
+            // }
         } else {
             console.log("Processing as SELL order...");
             this.orderBook.addSellOrder(order);
@@ -167,6 +167,40 @@ class Engine {
         
 
 
+        return true;
+    }
+
+    async updateOrder(order) {
+        if (!order || !order.id) {
+            console.log("Invalid order provided for update");
+            return false;
+        }
+    
+        console.log("Updating order:", order);
+        
+        // First refresh the book to get the latest state
+        await this.refreshBook();
+        
+        // Find the order in the sell orders array
+        const orderIndex = this.orderBook.sellOrders.findIndex(o => o.id === order.id);
+        
+        if (orderIndex === -1) {
+            console.log(`Order with id ${order.id} not found in the order book`);
+            return false;
+        }
+        
+        // Update the order with new values
+        this.orderBook.sellOrders[orderIndex] = {
+            ...this.orderBook.sellOrders[orderIndex],
+            ...order
+        };
+        
+        console.log("Order updated in order book:", this.orderBook.sellOrders[orderIndex]);
+        
+        // Save updated order book to Redis
+        await this.saveBookInRedis();
+        console.log("Order book saved after update");
+        
         return true;
     }
 

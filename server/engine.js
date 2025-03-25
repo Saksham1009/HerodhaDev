@@ -78,7 +78,7 @@ router.post('/placeStockOrder', async (req, res) => {
                 is_buy: false,
                 order_type,
                 quantity,
-                price: order_type === "MARKET" ? 0 : price,
+                price: price,
             };
 
             await matchingEngine.executeOrder(engineSellOrder);
@@ -104,11 +104,9 @@ router.post('/placeStockOrder', async (req, res) => {
             }, 0);
 
             if (totalStocks < quantity) {
-                return res.status(400).json({
-                    success: false,
-                    data: {
-                        error: "Enough stocks are not available at this moment"
-                    }
+                return res.status(200).json({
+                    success: true,
+                    data: []
                 });
             }
 
@@ -139,6 +137,14 @@ router.post('/placeStockOrder', async (req, res) => {
                 });
                 await buyStockTx.save();
 
+                const parentStockTx = await Stock_Tx.findOne({ stock_tx_id: sellOrder.id });
+                if (parentStockTx) {
+                    if (parentStockTx.order_status !== 'PARTIALLY_COMPLETE') {
+                        parentStockTx.order_status = 'PARTIALLY_COMPLETE';
+                        await parentStockTx.save();
+                    }
+                }
+
                 const sellStockTx = new Stock_Tx({
                     stock_tx_id: uuid.v4(),
                     stock_id: stock_id,
@@ -149,15 +155,9 @@ router.post('/placeStockOrder', async (req, res) => {
                     order_type: 'LIMIT',
                     quantity: quantityToMatch,
                     stock_price: priceToMatch,
-                    parent_stock_tx_id: sellOrder.id
+                    parent_stock_tx_id: parentStockTx.stock_tx_id
                 });
                 await sellStockTx.save();
-
-                const parentStockTx = await Stock_Tx.findOne({ stock_tx_id: sellOrder.id });
-                if (parentStockTx) {
-                    parentStockTx.order_status = 'PARTIALLY_COMPLETE';
-                    await parentStockTx.save();
-                }
 
                 const buyWalletTx = new Wallet_Tx({
                     wallet_tx_id: buyStockTx.wallet_tx_id,
@@ -186,6 +186,8 @@ router.post('/placeStockOrder', async (req, res) => {
                 sellOrder.quantity -= quantityToMatch;
                 if (sellOrder.quantity === 0) {
                     await matchingEngine.cancelOrder(sellOrder);
+                } else {
+                    await matchingEngine.updateOrder(sellOrder);
                 }
 
                 quantityLeftToMatch -= quantityToMatch;
@@ -249,7 +251,11 @@ router.post('/cancelStockTransaction', async (req, res) => {
             });
         }
 
-        if (stockTx.order_status === 'COMPLETED') {
+        const prevStatus = stockTx.order_status;
+
+        console.log("Previous status: ", prevStatus);
+
+        if (stockTx.order_status === 'COMPLETED' || stockTx.order_status === 'CANCELLED') {
             return res.status(400).json({
                 "success": false,
                 "data": {
@@ -261,15 +267,20 @@ router.post('/cancelStockTransaction', async (req, res) => {
         stockTx.order_status = 'CANCELLED';
         await stockTx.save();
 
+        var quantityToReturn = stockTx.quantity;
+
+        console.log("Quantity to return: ", quantityToReturn);
+
         const nestedStockTransactions = await Stock_Tx.find({ parent_stock_tx_id: stock_tx_id });
 
-        matchingEngine.orderBook.sellOrders = matchingEngine.orderBook.sellOrders.filter(order => {
-            return !(order.stock_id === stockTx.stock_id && order.user_id === user_id); 
-        });
+        console.log("Nested stock transactions: ", nestedStockTransactions);
 
-        const quantityToReturn = nestedStockTransactions.reduce((acc, tx) => {
+        const totalQMatched = nestedStockTransactions.reduce((acc, tx) => {
             return acc + tx.quantity;
         }, 0);
+        quantityToReturn = stockTx.quantity - totalQMatched;
+
+        console.log("Total quantity matched: ", totalQMatched);
 
         if (quantityToReturn > 0) {
             const userStock = await User_Stocks.findOne({ user_id: user_id, stock_id: stockTx.stock_id });
