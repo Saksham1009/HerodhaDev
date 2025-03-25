@@ -41,7 +41,7 @@ router.post('/placeStockOrder', async (req, res) => {
         if (!user) {
             return res.status(404).json({ success: false, message: 'Invalid user ID' });
         }
-
+        //sell order
         if (!is_buy && order_type === 'LIMIT') {
             const userStock = await User_Stocks.findOne({ user_id: user_id, stock_id: stock_id });
             if (!userStock || userStock.quantity_owned < quantity) {
@@ -83,8 +83,12 @@ router.post('/placeStockOrder', async (req, res) => {
 
             await matchingEngine.executeOrder(engineSellOrder);
         } else {
+            console.log(" Processing BUY order...");
+            await matchingEngine.refreshBook();
             const sellOrders = await matchingEngine.orderBook.getSellOrders();
+            console.log("Fetched sell orders from engine:", sellOrders);
             const filteredSellOrders = sellOrders.filter(order => order.stock_id === stock_id && order.user_id !== user_id);
+            console.log("filtered sell orders", filteredSellOrders);
 
             if (!filteredSellOrders || filteredSellOrders.length === 0) {
                 return res.status(400).json({
