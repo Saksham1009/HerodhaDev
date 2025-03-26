@@ -1,4 +1,57 @@
 services:
+  server_1:
+    build:
+      context: ./server
+    container_name: server_1
+    restart: always
+    expose:
+      - "3030"
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - inter-service-network
+
+  server_2:
+    build:
+      context: ./server
+    container_name: server_2
+    restart: always
+    expose:
+      - "3030"
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - inter-service-network
+
+  server_3:
+    build:
+      context: ./server
+    container_name: server_3
+    restart: always
+    expose:
+      - "3030"
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - inter-service-network
+
+  server_4:
+    build:
+      context: ./server
+    container_name: server_4
+    restart: always
+    expose:
+      - "3030"
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - inter-service-network
+
+
   mongo:
     image: mongo
     container_name: mongodb
@@ -16,18 +69,6 @@ services:
     networks:
       - inter-service-network
 
-  server:
-    build:
-      context: ./server
-    networks:
-      - inter-service-network
-    depends_on:
-      - mongo
-      - redis
-    deploy:
-      replicas: 10
-    restart: always
-
   # can we do this duplication above manually?
 
   nginx:
@@ -36,7 +77,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - server
+      - server_1
+      - server_2
+      - server_3
+      - server_4
     networks:
       - inter-service-network
 
