@@ -26,6 +26,7 @@ services:
       - redis
     deploy:
       replicas: 4
+    restart: always
 
   # can we do this duplication above manually?
 
