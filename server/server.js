@@ -16,6 +16,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+//simple health check
+app.get('/health', (req, res) => {
+   return res.status(200).send('Server is up and running');
+});
+
+
 function tokenCheck(req, res, next) {
     const token = req.headers.token;
 
@@ -40,7 +46,7 @@ app.use('/transaction', tokenCheck, stockHandler);
 app.use('/engine', tokenCheck, engine);
 
 app.listen(3030, () => {
-    console.log('Server is running successfully on port 3001');
+    console.log('Server is running successfully on port 3030');
 });
 
 // TODO: Move keys to .env

@@ -30,13 +30,62 @@ services:
 
   # can we do this duplication above manually?
 
-  nginx:
+  nginx_1:
     build:
       context: ./nginx
+    container_name: nginx_1
     ports:
-      - "8080:8080"
+      - "1900:8080"   # Host port 1900 maps to container port 8080
     depends_on:
       - server
+    networks:
+      - inter-service-network
+
+  nginx_2:
+    build:
+      context: ./nginx
+    container_name: nginx_2
+    ports:
+      - "1901:8080"   # Host port 1901 maps to container port 8080
+    depends_on:
+      - server
+    networks:
+      - inter-service-network
+
+  nginx_3:
+    build:
+      context: ./nginx
+    container_name: nginx_3
+    ports:
+      - "1902:8080"   # Host port 1902 maps to container port 8080
+    depends_on:
+      - server
+    networks:
+      - inter-service-network
+
+  nginx_4:
+    build:
+      context: ./nginx
+    container_name: nginx_4
+    ports:
+      - "1903:8080"   # Host port 1903 maps to container port 8080
+    depends_on:
+      - server
+    networks:
+      - inter-service-network
+
+  haproxy:
+    image: haproxy:latest
+    container_name: haproxy
+    ports:
+      - "8080:80"       # HAProxy listens on host port 80
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - nginx_1
+      - nginx_2
+      - nginx_3
+      - nginx_4
     networks:
       - inter-service-network
 
