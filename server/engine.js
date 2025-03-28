@@ -7,7 +7,7 @@ const Stock_Tx = require('./DBModels/Stock_Tx');
 const matchingEngine = require('./DBModels/engine');
 const Wallet_Tx = require('./DBModels/Wallet_Tx');
 const uuid = require('uuid');
-
+/*
 router.post('/placeStockOrder', async (req, res) => {
     const { stock_id, is_buy, order_type, quantity, price } = req.body;
     const user_id = req.userId;
@@ -223,6 +223,183 @@ router.post('/placeStockOrder', async (req, res) => {
             success: false,
             data: { message: err.message }
         });
+    }
+});
+*/
+
+
+router.post('/placeStockOrder', async (req, res) => {
+    const { stock_id, is_buy, order_type, quantity, price } = req.body;
+    const user_id = req.userId;
+
+    if (!stock_id || !order_type || !quantity || is_buy === undefined || (order_type === 'LIMIT' && price == null)) {
+        return res.status(400).json({ success: false, data: { error: "Please provide all the required fields" } });
+    }
+
+    if (is_buy && order_type === 'MARKET' && price) {
+        return res.status(400).json({ success: false, data: { error: "Price should not be provided for market orders" } });
+    }
+
+    try {
+        const [stock, user] = await Promise.all([
+            Stock.findOne({ stock_id }),
+            User.findOne({ user_id })
+        ]);
+
+        if (!stock) return res.status(404).json({ success: false, message: 'Invalid stock ID' });
+        if (!user) return res.status(404).json({ success: false, message: 'Invalid user ID' });
+
+        if (!is_buy && order_type === 'LIMIT') {
+            // SELL LIMIT
+            const userStock = await User_Stocks.findOne({ user_id, stock_id });
+
+            if (!userStock || userStock.quantity_owned < quantity) {
+                return res.status(400).json({ success: false, message: 'Insufficient stocks' });
+            }
+
+            userStock.quantity_owned -= quantity;
+            if (userStock.quantity_owned === 0) {
+                await User_Stocks.deleteOne({ user_id, stock_id });
+            } else {
+                await userStock.save();
+            }
+
+            const stockTx = new Stock_Tx({
+                stock_tx_id: uuid.v4(),
+                stock_id,
+                user_id,
+                is_buy: false,
+                order_type,
+                quantity,
+                stock_price: price,
+                order_status: 'IN_PROGRESS',
+                parent_stock_tx_id: null
+            });
+
+            await stockTx.save();
+
+            await matchingEngine.executeOrder({
+                id: stockTx.stock_tx_id,
+                stock_id,
+                user_id,
+                is_buy: false,
+                order_type,
+                quantity,
+                price
+            });
+
+            return res.json({ success: true, data: null });
+        }
+
+        // BUY ORDER FLOW
+        await matchingEngine.refreshBook();
+        const sellOrders = (await matchingEngine.orderBook.getSellOrders())
+            .filter(order => order.stock_id === stock_id && order.user_id !== user_id);
+
+        if (!sellOrders.length) {
+            return res.status(400).json({ success: false, data: { error: "No sell orders available" } });
+        }
+
+        const totalAvailable = sellOrders.reduce((sum, o) => sum + o.quantity, 0);
+        if (totalAvailable < quantity) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        let quantityLeft = quantity;
+        let totalCost = 0;
+        const txs = [];
+
+        for (const sellOrder of sellOrders) {
+            const qty = Math.min(quantityLeft, sellOrder.quantity);
+            const cost = qty * sellOrder.price;
+            totalCost += cost;
+
+            if (user.balance < totalCost) {
+                return res.status(400).json({ success: false, data: { message: 'Insufficient funds' } });
+            }
+
+            // Build transactions in-memory
+            const buyTxId = uuid.v4();
+            const sellTxId = uuid.v4();
+
+            txs.push(
+                new Stock_Tx({
+                    stock_tx_id: buyTxId,
+                    stock_id,
+                    user_id,
+                    is_buy: true,
+                    quantity: qty,
+                    stock_price: sellOrder.price,
+                    order_type,
+                    order_status: 'COMPLETED',
+                    wallet_tx_id: buyTxId, 
+                    parent_stock_tx_id: null
+                }),
+                new Stock_Tx({
+                    stock_tx_id: sellTxId,
+                    stock_id,
+                    user_id: sellOrder.user_id,
+                    is_buy: false,
+                    quantity: qty,
+                    stock_price: sellOrder.price,
+                    order_type: 'LIMIT',
+                    order_status: 'COMPLETED',
+                    wallet_tx_id: sellTxId,
+                    parent_stock_tx_id: sellOrder.id
+                }),
+                new Wallet_Tx({
+                    wallet_tx_id: buyTxId,
+                    user_id,
+                    is_debit: true,
+                    stock_tx_id: buyTxId,
+                    amount: cost
+                }),
+                new Wallet_Tx({
+                    wallet_tx_id: sellTxId,
+                    user_id: sellOrder.user_id,
+                    is_debit: false,
+                    stock_tx_id: sellTxId,
+                    amount: cost
+                })
+            );
+
+            const seller = await User.findOne({ user_id: sellOrder.user_id });
+            if (seller) {
+                seller.balance += cost;
+                await seller.save();
+            }
+
+            sellOrder.quantity -= qty;
+            if (sellOrder.quantity === 0) await matchingEngine.cancelOrder(sellOrder);
+            else await matchingEngine.updateOrder(sellOrder);
+
+            quantityLeft -= qty;
+            if (quantityLeft <= 0) break;
+        }
+
+        user.balance -= totalCost;
+        await user.save();
+
+        await Promise.all(txs.map(tx => tx.save()));
+
+        const buyerStock = await User_Stocks.findOne({ user_id, stock_id });
+        if (buyerStock) {
+            buyerStock.quantity_owned += quantity;
+            await buyerStock.save();
+        } else {
+            await new User_Stocks({
+                user_stock_id: uuid.v4(),
+                user_id,
+                stock_id,
+                quantity_owned: quantity,
+                stock_name: stock.stock_name
+            }).save();
+        }
+
+        return res.json({ success: true, data: null });
+    } catch (err) {
+        console.error("Error placing order:", err);
+        return res.status(500).json({ success: false, data: { message: err.message } });
     }
 });
 
