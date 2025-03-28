@@ -315,9 +315,5 @@ router.post('/cancelStockTransaction', async (req, res) => {
     }
 });
 
-(async () => {
-    await User.createIndexes({ user_name: 1 }, { unique: true });
-    
-})();
 
 module.exports = router;
