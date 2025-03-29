@@ -19,7 +19,7 @@ services:
   server:
     build:
       context: ./server
-    container_name: backend
+    container_name: server
     ports:
       - "3030:3030"
     networks:
