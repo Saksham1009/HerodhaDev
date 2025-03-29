@@ -34,7 +34,7 @@ services:
       context: ./nginx
     container_name: nginx_1
     ports:
-      - "1900:8080"
+      - "1900:1900"
     networks:
       - inter-service-network
 
@@ -43,7 +43,7 @@ services:
       context: ./nginx
     container_name: nginx_2
     ports:
-      - "1901:8080"
+      - "1901:1901"
     networks:
       - inter-service-network
 
@@ -52,7 +52,7 @@ services:
       context: ./nginx
     container_name: nginx_3
     ports:
-      - "1902:8080"
+      - "1902:1902"
     networks:
       - inter-service-network
 
@@ -61,7 +61,7 @@ services:
       context: ./nginx
     container_name: nginx_4
     ports:
-      - "1903:8080"
+      - "1903:1903"
     networks:
       - inter-service-network
 
@@ -69,7 +69,7 @@ services:
     image: haproxy:latest
     container_name: haproxy
     ports:
-      - "8080:80"
+      - "8080:8080"
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
