@@ -16,28 +16,25 @@ services:
     networks:
       - inter-service-network
 
-  server:
+  backend:
     build:
       context: ./server
+    container_name: backend
+    ports:
+      - "3001:3001"
     networks:
       - inter-service-network
     depends_on:
       - mongo
       - redis
-    deploy:
-      replicas: 15
     restart: always
-
-  # can we do this duplication above manually?
 
   nginx_1:
     build:
       context: ./nginx
     container_name: nginx_1
     ports:
-      - "1900:8080"   # Host port 1900 maps to container port 8080
-    depends_on:
-      - server
+      - "1900:1900"
     networks:
       - inter-service-network
 
@@ -46,9 +43,7 @@ services:
       context: ./nginx
     container_name: nginx_2
     ports:
-      - "1901:8080"   # Host port 1901 maps to container port 8080
-    depends_on:
-      - server
+      - "1901:1901"
     networks:
       - inter-service-network
 
@@ -57,9 +52,7 @@ services:
       context: ./nginx
     container_name: nginx_3
     ports:
-      - "1902:8080"   # Host port 1902 maps to container port 8080
-    depends_on:
-      - server
+      - "1902:1902"
     networks:
       - inter-service-network
 
@@ -68,9 +61,7 @@ services:
       context: ./nginx
     container_name: nginx_4
     ports:
-      - "1903:8080"   # Host port 1903 maps to container port 8080
-    depends_on:
-      - server
+      - "1903:1903"
     networks:
       - inter-service-network
 
@@ -78,7 +69,7 @@ services:
     image: haproxy:latest
     container_name: haproxy
     ports:
-      - "8080:80"       # HAProxy listens on host port 80
+      - "8080:80"
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
