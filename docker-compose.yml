@@ -26,6 +26,8 @@ services:
       - redis
     deploy:
       replicas: 15
+    expose: 
+      - "3030"
     restart: always
 
   nginx_1:
@@ -33,7 +35,7 @@ services:
       context: ./nginx
     container_name: nginx_1
     ports:
-      - "1900:1900"
+      - "1900:8080"
     depends_on: 
       - server
     networks:
@@ -44,7 +46,7 @@ services:
       context: ./nginx
     container_name: nginx_2
     ports:
-      - "1901:1901"
+      - "1901:8080"
     depends_on: 
       - server
     networks:
@@ -55,7 +57,7 @@ services:
       context: ./nginx
     container_name: nginx_3
     ports:
-      - "1902:1902"
+      - "1902:8080"
     depends_on: 
       - server
     networks:
@@ -66,7 +68,7 @@ services:
       context: ./nginx
     container_name: nginx_4
     ports:
-      - "1903:1903"
+      - "1903:8080"
     depends_on: 
       - server
     networks:
@@ -76,7 +78,7 @@ services:
     image: haproxy:latest
     container_name: haproxy
     ports:
-      - "8080:8080"
+      - "8080:80"
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
