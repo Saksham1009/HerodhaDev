@@ -25,7 +25,7 @@ services:
       - mongo
       - redis
     deploy:
-      replicas: 20
+      replicas: 10
     restart: always
 
   # can we do this duplication above manually?
