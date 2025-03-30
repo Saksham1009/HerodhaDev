@@ -3,18 +3,8 @@ const jwt = require('jsonwebtoken');
 const User = require('./DBModels/User');
 const redis = require('./RedisConnection');
 const uuid = require('uuid');
-const bcrypt = require('bcryptjs');
 
 const router = express.Router();
-
-const createHashedPassword = async (password) => {
-    const saltRounds = 10;
-    return await bcrypt.hash(password, saltRounds);
-}
-
-const verifyPassword = async (password, encodedPass) => {
-    return await bcrypt.compare(password, encodedPass);
-};
 
 router.post('/register', async (req, res) => {
     const username = req.body.user_name;
@@ -57,14 +47,14 @@ router.post('/register', async (req, res) => {
             });
         }
 
-        const encodedPass = await createHashedPassword(password);
-
         user = new User({
             user_id: uuid.v4(),
             user_name: username,
-            password: encodedPass,
+            password: password,
             name: name
         });
+
+        await redis.set(user.user_name, JSON.stringify({ userId: user.user_id, password: user.password }), 'EX', 3600);
 
         await user.save();
 
@@ -87,8 +77,9 @@ router.post('/login', async (req, res) => {
     const password = req.body.password;
 
     try {
-        const user = await User.findOne({ user_name: username });
-        if (!user || !(await verifyPassword(password, user.password))) {
+        const user = await redis.get(username);
+        const userJson = JSON.parse(user);
+        if (!username || !(password === userJson.password)) {
             return res.status(400).json({
                 "success": false,
                 "data": {
@@ -97,7 +88,7 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        const token = jwt.sign({ userId: user.user_id, username: user.user_name }, "thisisacustomanduniquesecrecetkey", { expiresIn: '3h' });
+        const token = jwt.sign({ userId: userJson.userId, username: username }, "thisisacustomanduniquesecrecetkey", { expiresIn: '3h' });
         return res.json({
             "success": true,
             "data": {
