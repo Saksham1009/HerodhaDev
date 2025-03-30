@@ -41,7 +41,7 @@ router.post('/placeStockOrder', async (req, res) => {
         if (!user) {
             return res.status(404).json({ success: false, message: 'Invalid user ID' });
         }
-
+        //sell order
         if (!is_buy && order_type === 'LIMIT') {
             const userStock = await User_Stocks.findOne({ user_id: user_id, stock_id: stock_id });
             if (!userStock || userStock.quantity_owned < quantity) {
@@ -78,13 +78,17 @@ router.post('/placeStockOrder', async (req, res) => {
                 is_buy: false,
                 order_type,
                 quantity,
-                price: order_type === "MARKET" ? 0 : price,
+                price: price,
             };
 
             await matchingEngine.executeOrder(engineSellOrder);
         } else {
+            console.log(" Processing BUY order...");
+            await matchingEngine.refreshBook();
             const sellOrders = await matchingEngine.orderBook.getSellOrders();
+            console.log("Fetched sell orders from engine:", sellOrders);
             const filteredSellOrders = sellOrders.filter(order => order.stock_id === stock_id && order.user_id !== user_id);
+            console.log("filtered sell orders", filteredSellOrders);
 
             if (!filteredSellOrders || filteredSellOrders.length === 0) {
                 return res.status(400).json({
@@ -100,16 +104,14 @@ router.post('/placeStockOrder', async (req, res) => {
             }, 0);
 
             if (totalStocks < quantity) {
-                return res.status(400).json({
-                    success: false,
-                    data: {
-                        error: "Enough stocks are not available at this moment"
-                    }
+                return res.status(200).json({
+                    success: true,
+                    data: []
                 });
             }
 
-            const quantityLeftToMatch = quantity;
-            const totalPriceForOrder = 0;
+            let quantityLeftToMatch = quantity;
+            let totalPriceForOrder = 0;
 
             for (let sellOrder of filteredSellOrders) {
                 const quantityToMatch = Math.min(quantityLeftToMatch, sellOrder.quantity);
@@ -135,6 +137,14 @@ router.post('/placeStockOrder', async (req, res) => {
                 });
                 await buyStockTx.save();
 
+                const parentStockTx = await Stock_Tx.findOne({ stock_tx_id: sellOrder.id });
+                if (parentStockTx) {
+                    if (parentStockTx.order_status !== 'PARTIALLY_COMPLETE') {
+                        parentStockTx.order_status = 'PARTIALLY_COMPLETE';
+                        await parentStockTx.save();
+                    }
+                }
+
                 const sellStockTx = new Stock_Tx({
                     stock_tx_id: uuid.v4(),
                     stock_id: stock_id,
@@ -142,10 +152,10 @@ router.post('/placeStockOrder', async (req, res) => {
                     user_id: sellOrder.user_id,
                     order_status: 'COMPLETED',
                     is_buy: false,
-                    order_type: order_type,
+                    order_type: 'LIMIT',
                     quantity: quantityToMatch,
                     stock_price: priceToMatch,
-                    parent_stock_tx_id: sellOrder.id
+                    parent_stock_tx_id: parentStockTx.stock_tx_id
                 });
                 await sellStockTx.save();
 
@@ -176,6 +186,8 @@ router.post('/placeStockOrder', async (req, res) => {
                 sellOrder.quantity -= quantityToMatch;
                 if (sellOrder.quantity === 0) {
                     await matchingEngine.cancelOrder(sellOrder);
+                } else {
+                    await matchingEngine.updateOrder(sellOrder);
                 }
 
                 quantityLeftToMatch -= quantityToMatch;
@@ -239,7 +251,11 @@ router.post('/cancelStockTransaction', async (req, res) => {
             });
         }
 
-        if (stockTx.order_status === 'COMPLETED') {
+        const prevStatus = stockTx.order_status;
+
+        console.log("Previous status: ", prevStatus);
+
+        if (stockTx.order_status === 'COMPLETED' || stockTx.order_status === 'CANCELLED') {
             return res.status(400).json({
                 "success": false,
                 "data": {
@@ -251,25 +267,31 @@ router.post('/cancelStockTransaction', async (req, res) => {
         stockTx.order_status = 'CANCELLED';
         await stockTx.save();
 
+        var quantityToReturn = stockTx.quantity;
+
+        console.log("Quantity to return: ", quantityToReturn);
+
         const nestedStockTransactions = await Stock_Tx.find({ parent_stock_tx_id: stock_tx_id });
 
-        matchingEngine.orderBook.sellOrders = matchingEngine.orderBook.sellOrders.filter(order => {
-            return !(order.stock_id === stockTx.stock_id && order.user_id === user_id); 
-        });
+        console.log("Nested stock transactions: ", nestedStockTransactions);
 
-        const quantityToReturn = nestedStockTransactions.reduce((acc, tx) => {
+        const totalQMatched = nestedStockTransactions.reduce((acc, tx) => {
             return acc + tx.quantity;
         }, 0);
+        quantityToReturn = stockTx.quantity - totalQMatched;
+
+        console.log("Total quantity matched: ", totalQMatched);
 
         if (quantityToReturn > 0) {
             const userStock = await User_Stocks.findOne({ user_id: user_id, stock_id: stockTx.stock_id });
             if (!userStock) {
+                const stock = await Stock.findOne({ stock_id: stockTx.stock_id });
                 const newUserStock = new User_Stocks({
                     user_stock_id: uuid.v4(),
                     user_id: user_id,
                     stock_id: stockTx.stock_id,
                     quantity_owned: quantityToReturn,
-                    stock_name: stockTx.stock_name
+                    stock_name: stock.stock_name
                 });
                 await newUserStock.save();
             } else {
