@@ -30,6 +30,4 @@ const UserCollection = new mongoose.Schema({
     }
 });
 
-// TODO: Could add indexes here for better optimizations later?
-
 module.exports = mongoose.model('User', UserCollection);

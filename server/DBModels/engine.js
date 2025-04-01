@@ -95,65 +95,9 @@ class Engine {
         }
     }
     
-    /*
-    async saveBookInRedis() {
-        try {
-            console.log("Saving current sell orders to Redis...");
-            await redis.set("orderBookData", JSON.stringify(this.orderBook.sellOrders));
-            await redis.publish("orderBookData", JSON.stringify(this.orderBook.sellOrders));
-            console.log("Sell orders saved and published to Redis.");
-
-            const stocks = [...new Set(this.orderBook.sellOrders.map(order => order.stock_id))];
-            console.log("Unique stock IDs found in sell orders:", stocks);
-
-            const cacheKey = `stock_prices_${stocks.join("_")}`;
-            console.log("Generated cache key for stock prices:", cacheKey);
-
-            const stockPrices = {};
-            const stockPriceData = this.orderBook.sellOrders;
-            stockPriceData.forEach(order => {
-                if (stockPrices[order.stock_id] && stockPrices[order.stock_id] > order.price) {
-                    stockPrices[order.stock_id] = order.price;
-                } else if (!stockPrices[order.stock_id]) {
-                    stockPrices[order.stock_id] = order.price;
-                }
-            });
-
-            const stockData = await Stock.find();
-            const response = [];
-            Object.keys(stockPrices).forEach(stock => {
-                const stockName = stockData.find(data => data.stock_id === stock).stock_name;
-                response.push({
-                    "stock_id": stock,
-                    "stock_name": stockName,
-                    "stock_price": stockPrices[stock]
-                });
-            });
-
-            redis.set(cacheKey, JSON.stringify(response));
-        } catch (error) {
-            console.error("Error saving order book in Redis: " + error);
-        }
-    }
-*/
     async executeOrder(order) {
         console.log("Executing order:", order);
         if (order.is_buy && order.order_type === 'MARKET') {
-            // console.log("Processing as market BUY order...");
-            // const sellOrder = this.orderBook.getFirstSellOrder(); // TODO: this might cause issue since we are have all stockids in one list
-            // console.log("First available sell order:", sellOrder);
-            // while (order.quantity > 0 && sellOrder) {
-            //     const quantity = Math.min(order.quantity, sellOrder.quantity);
-            //     console.log(`Matching quantity: ${quantity}`);
-
-            //     order.quantity -= quantity;
-            //     sellOrder.quantity -= quantity;
-
-            //     if (sellOrder.quantity === 0) {
-            //         this.orderBook.deleteSellOrder(sellOrder.id);
-            //     }
-            
-            // }
         } else {
             console.log("Processing as SELL order...");
             this.orderBook.addSellOrder(order);

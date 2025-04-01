@@ -42,5 +42,3 @@ app.use('/engine', tokenCheck, engine);
 app.listen(3030, () => {
     console.log('Server is running successfully on port 3001');
 });
-
-// TODO: Move keys to .env
